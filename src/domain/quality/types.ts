@@ -1,6 +1,6 @@
 export type ArrType = 'radarr' | 'sonarr';
 export type QualityUnknownPolicy = 'allow' | 'strict';
-export type QualityConfidence = 'exact' | 'high' | 'medium' | 'low' | 'unknown';
+export type QualityConfidence = 'probed' | 'exact' | 'high' | 'medium' | 'low' | 'unknown';
 export type HdrPreference = 'required' | 'preferred' | 'forbidden' | 'unknown';
 
 export interface RequestQualityContext {
@@ -63,9 +63,15 @@ export interface XtreamMediaQuality {
   dolbyVision?: boolean;
   codec?: string;
   source?: string;
+  language?: string;
+  audioLanguages?: string[];
+  platform?: string;
+  width?: number;
+  height?: number;
   bitrate?: number;
   confidence: QualityConfidence;
   evidence: string[];
+  probed?: boolean;
 }
 
 export interface QualityEvaluation {
@@ -74,6 +80,7 @@ export interface QualityEvaluation {
   reasons: string[];
   unknowns: string[];
   observed: Partial<XtreamMediaQuality>;
+  languageScore?: number;
 }
 
 export interface QualityDecision {

@@ -2,10 +2,13 @@ import { loadConfig } from './config.js';
 import { createAppContext } from './app-context.js';
 import { buildApp } from './app.js';
 import { createLogger } from './logging/logger.js';
+import { assertFfprobeAvailable } from './services/xtream-media-probe.js';
 
 async function main() {
   const config = loadConfig();
   const log = createLogger(config);
+  await assertFfprobeAvailable(config.FFPROBE_PATH);
+  log.info({ ffprobe: config.FFPROBE_PATH }, 'ffprobe available');
   const ctx = createAppContext(config, log);
 
   // Startup reconciliation

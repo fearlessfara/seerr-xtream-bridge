@@ -8,11 +8,13 @@ import {
   XtreamCartStatusSchema,
   XtreamSeriesEpisodesSchema,
   XtreamSourceSchema,
+  XtreamSourcesResponseSchema,
 } from './schemas/xtreamfilter.js';
 import { z } from 'zod';
 
 type BrowseItem = z.infer<typeof XtreamBrowseItemSchema>;
 type BrowseEntry = z.infer<typeof XtreamBrowseResponseSchema>['items'][number];
+export type XtreamSourceInfo = z.infer<typeof XtreamSourceSchema>;
 
 function isBrowseGroup(entry: BrowseEntry): entry is BrowseEntry & { items: BrowseItem[] } {
   return 'items' in entry && Array.isArray((entry as { items?: unknown }).items);
@@ -35,6 +37,7 @@ function toCandidate(
     streamId: contentType === 'vod' ? String(item.id) : undefined,
     seriesId: contentType === 'series' ? String(item.id) : undefined,
     name,
+    group: item.group ?? opts?.groupName,
     tmdbId: item.tmdb_id ?? opts?.groupTmdb ?? null,
     contentType,
     containerExtension: item.container_extension ?? undefined,
@@ -64,8 +67,17 @@ export function flattenBrowseItems(
   return leaves.filter((c): c is MatchCandidate => c != null);
 }
 
+function normalizeSourcesPayload(
+  data: z.infer<typeof XtreamSourcesResponseSchema>,
+): XtreamSourceInfo[] {
+  if (Array.isArray(data)) return data;
+  return data.sources ?? [];
+}
+
 export class XtreamFilterClient {
   private readonly http: HttpClient;
+  private sourcesCache: { at: number; sources: XtreamSourceInfo[] } | null = null;
+  private readonly sourcesTtlMs: number;
 
   constructor(config: AppConfig, fetchImpl?: typeof fetch) {
     this.http = new HttpClient({
@@ -74,6 +86,7 @@ export class XtreamFilterClient {
       serviceName: 'xtreamfilter',
       fetchImpl,
     });
+    this.sourcesTtlMs = config.QUALITY_PROFILE_CACHE_TTL_SECONDS * 1000;
   }
 
   async browseByTmdb(tmdbId: number, type?: 'vod' | 'series'): Promise<MatchCandidate[]> {
@@ -122,11 +135,27 @@ export class XtreamFilterClient {
     });
   }
 
-  async listSources() {
+  async listSources(force = false): Promise<XtreamSourceInfo[]> {
+    if (!force && this.sourcesCache && Date.now() - this.sourcesCache.at < this.sourcesTtlMs) {
+      return this.sourcesCache.sources;
+    }
     const { data } = await this.http.request('GET', '/api/sources', {
-      schema: z.array(XtreamSourceSchema),
+      schema: XtreamSourcesResponseSchema,
     });
-    return data;
+    const sources = normalizeSourcesPayload(data as z.infer<typeof XtreamSourcesResponseSchema>);
+    this.sourcesCache = { at: Date.now(), sources };
+    return sources;
+  }
+
+  /**
+   * Resolve XtreamFilter dedicated route slug for a browse source_id.
+   * Uses the API `route` field only — never invents a slug from display name.
+   */
+  async resolveSourceRoute(sourceId: string): Promise<string | undefined> {
+    const sources = await this.listSources();
+    const source = sources.find((s) => s.id === sourceId);
+    const route = source?.route?.trim();
+    return route || undefined;
   }
 
   findCartMovie(

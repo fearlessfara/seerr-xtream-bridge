@@ -77,12 +77,20 @@ See [`.env.example`](./.env.example). Required at minimum:
 
 Quality:
 
-| Variable                                 | Default | Meaning                                             |
-| ---------------------------------------- | ------- | --------------------------------------------------- |
-| `QUALITY_UNKNOWN_POLICY`                 | `allow` | `strict` falls back when important metadata unknown |
-| `QUALITY_PROFILE_CACHE_TTL_SECONDS`      | `300`   | In-memory profile cache                             |
-| `SEERR_AVAILABILITY_GRACE_SECONDS`       | `60`    | Wait for Seerr natural Jellyfin sync                |
-| `SEERR_REQUEST_COMPLETION_GRACE_SECONDS` | `60`    | Wait before reconciliation approve                  |
+| Variable                                 | Default   | Meaning                                                                        |
+| ---------------------------------------- | --------- | ------------------------------------------------------------------------------ |
+| `QUALITY_UNKNOWN_POLICY`                 | `allow`   | Applies to non-resolution unknowns after probe; unprobed VOD is never selected |
+| `QUALITY_PROFILE_CACHE_TTL_SECONDS`      | `300`     | In-memory profile cache                                                        |
+| `XTREAM_PREFERRED_LANGUAGES`             | `en`      | Comma-separated preferred catalogue/audio languages                            |
+| `XTREAM_MAX_CANDIDATE_PROBES`            | `5`       | Max sequential ffprobe attempts per request                                    |
+| `XTREAM_PROBE_TIMEOUT_MS`                | `15000`   | Per-candidate ffprobe timeout                                                  |
+| `FFPROBE_PATH`                           | `ffprobe` | Path to ffprobe binary                                                         |
+| `SEERR_AVAILABILITY_GRACE_SECONDS`       | `60`      | Wait for Seerr natural Jellyfin sync                                           |
+| `SEERR_REQUEST_COMPLETION_GRACE_SECONDS` | `60`      | Wait before reconciliation approve                                             |
+
+VOD selection probes candidates through XtreamFilter source routes
+(`{XTREAMFILTER_URL}/{source.route}/movie/user/pass/{id}.{ext}`) using `ffprobe`.
+Provider credentials are never configured or logged. The Docker image includes `ffmpeg`/`ffprobe`.
 
 Optional `RADARR_URL`/`RADARR_API_KEY` and `SONARR_*` override Seerr settings-based *arr discovery.
 

@@ -6,6 +6,7 @@ import { loadConfig, type AppConfig } from '../../src/config.js';
 import { createAppContext, type AppContext } from '../../src/app-context.js';
 import { createLogger } from '../../src/logging/logger.js';
 import { buildApp } from '../../src/app.js';
+import type { FfprobeExecutor } from '../../src/services/xtream-media-probe.js';
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
 
@@ -43,10 +44,59 @@ export function createMockFetch(routes: MockRoute[]): typeof fetch {
   }) as typeof fetch;
 }
 
+/** Deterministic ffprobe stub keyed by stream id in the probe URL. */
+export function createTestFfprobeExecutor(opts?: {
+  byStreamId?: Record<string, { width: number; height: number; codec?: string; lang?: string }>;
+  failStreamIds?: string[];
+  delayMs?: number;
+  onStart?: (url: string) => void;
+}): FfprobeExecutor {
+  const byStreamId = opts?.byStreamId ?? {
+    '9001': { width: 1920, height: 1080, codec: 'h264', lang: 'eng' },
+    '9002': { width: 3840, height: 2160, codec: 'hevc', lang: 'eng' },
+  };
+  const fail = new Set(opts?.failStreamIds ?? []);
+
+  return async (_binary, args) => {
+    const url = args[args.length - 1] ?? '';
+    opts?.onStart?.(url);
+    if (opts?.delayMs) {
+      await new Promise((r) => setTimeout(r, opts.delayMs));
+    }
+    const m = url.match(/\/(\d+)\.[a-z0-9]+$/i);
+    const streamId = m?.[1] ?? '';
+    if (fail.has(streamId)) {
+      return { code: 1, stdout: '', stderr: 'HTTP error 502', timedOut: false };
+    }
+    const meta = byStreamId[streamId] ?? { width: 1920, height: 1080, codec: 'h264', lang: 'eng' };
+    const body = {
+      streams: [
+        {
+          index: 0,
+          codec_name: meta.codec ?? 'h264',
+          codec_type: 'video',
+          width: meta.width,
+          height: meta.height,
+        },
+        {
+          index: 1,
+          codec_name: 'aac',
+          codec_type: 'audio',
+          channels: 2,
+          tags: { language: meta.lang ?? 'eng' },
+        },
+      ],
+      format: { duration: '100.0', bit_rate: '3000000' },
+    };
+    return { code: 0, stdout: JSON.stringify(body), stderr: '', timedOut: false };
+  };
+}
+
 export async function withTestApp(
   routes: MockRoute[],
   run: (ctx: AppContext, app: Awaited<ReturnType<typeof buildApp>>) => Promise<void>,
   envOverrides: Partial<AppConfig> = {},
+  ffprobeExecutor: FfprobeExecutor = createTestFfprobeExecutor(),
 ) {
   const dir = mkdtempSync(join(tmpdir(), 'bridge-int-'));
   const config = loadConfig({
@@ -67,15 +117,20 @@ export async function withTestApp(
     SEERR_AVAILABILITY_GRACE_SECONDS: '0',
     SEERR_REQUEST_COMPLETION_GRACE_SECONDS: '0',
     QUALITY_UNKNOWN_POLICY: 'allow',
+    XTREAM_PREFERRED_LANGUAGES: 'en',
+    XTREAM_MAX_CANDIDATE_PROBES: '5',
     LOG_LEVEL: 'silent',
     ...Object.fromEntries(
-      Object.entries(envOverrides).map(([k, v]) => [k, v == null ? '' : String(v)]),
+      Object.entries(envOverrides).map(([k, v]) => [
+        k,
+        Array.isArray(v) ? v.join(',') : v == null ? '' : String(v),
+      ]),
     ),
   } as NodeJS.ProcessEnv);
 
   const fetchImpl = createMockFetch(routes);
   const log = createLogger(config);
-  const ctx = createAppContext(config, log, fetchImpl);
+  const ctx = createAppContext(config, log, { fetchImpl, ffprobeExecutor });
   ctx.worker.stop();
   const app = await buildApp(ctx);
   try {
@@ -144,6 +199,10 @@ export function baseRoutes(opts?: {
     {
       match: (u, m) => m === 'GET' && u.includes('/api/browse'),
       body: browse,
+    },
+    {
+      match: (u, m) => m === 'GET' && u.includes('/api/sources'),
+      body: fixture('xtreamfilter/sources.json'),
     },
     {
       match: (u, m) => m === 'GET' && u.endsWith('/api/cart'),

@@ -1,0 +1,18 @@
+{
+  "sources": [
+    {
+      "id": "abcd1234",
+      "name": "Strong 8K",
+      "enabled": true,
+      "route": "strong",
+      "max_connections": 1
+    },
+    {
+      "id": "c31fa59e",
+      "name": "Strong 8K",
+      "enabled": true,
+      "route": "strong",
+      "max_connections": 1
+    }
+  ]
+}

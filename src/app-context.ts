@@ -9,6 +9,7 @@ import { Metrics } from './metrics/metrics.js';
 import { AcquisitionEngine } from './services/acquisition/engine.js';
 import { AlwaysAllowProviderActivity } from './services/provider-activity.js';
 import { QualityProfileResolverService } from './services/quality-profile-resolver.js';
+import { XtreamMediaProbe, type FfprobeExecutor } from './services/xtream-media-probe.js';
 import { ReconcileWorker } from './workers/reconcile.js';
 
 export interface AppContext {
@@ -20,23 +21,36 @@ export interface AppContext {
   engine: AcquisitionEngine;
   worker: ReconcileWorker;
   metrics: Metrics;
+  mediaProbe: XtreamMediaProbe;
   closed: boolean;
   close: () => void;
+}
+
+export interface AppContextDeps {
+  fetchImpl?: typeof fetch;
+  mediaProbe?: XtreamMediaProbe;
+  ffprobeExecutor?: FfprobeExecutor;
 }
 
 export function createAppContext(
   config: AppConfig,
   log: Logger,
-  fetchImpl?: typeof fetch,
+  fetchOrDeps?: typeof fetch | AppContextDeps,
 ): AppContext {
+  const deps: AppContextDeps =
+    typeof fetchOrDeps === 'function' || fetchOrDeps === undefined
+      ? { fetchImpl: fetchOrDeps }
+      : fetchOrDeps;
+
   const { db, close: closeDb } = openDatabase(config.DATABASE_PATH);
   const repo = new BridgeRepository(db);
   const metrics = new Metrics();
-  const seerr = new SeerrClient(config, fetchImpl);
-  const xtream = new XtreamFilterClient(config, fetchImpl);
-  const jellyfin = new JellyfinClient(config, fetchImpl);
-  const qualityResolver = new QualityProfileResolverService(config, seerr, fetchImpl);
+  const seerr = new SeerrClient(config, deps.fetchImpl);
+  const xtream = new XtreamFilterClient(config, deps.fetchImpl);
+  const jellyfin = new JellyfinClient(config, deps.fetchImpl);
+  const qualityResolver = new QualityProfileResolverService(config, seerr, deps.fetchImpl);
   const providerActivity = new AlwaysAllowProviderActivity();
+  const mediaProbe = deps.mediaProbe ?? new XtreamMediaProbe(config, deps.ffprobeExecutor);
   const engine = new AcquisitionEngine(
     config,
     repo,
@@ -45,6 +59,7 @@ export function createAppContext(
     jellyfin,
     qualityResolver,
     providerActivity,
+    mediaProbe,
     log,
     metrics,
   );
@@ -59,6 +74,7 @@ export function createAppContext(
     engine,
     worker,
     metrics,
+    mediaProbe,
     closed: false,
     close: () => {
       if (ctx.closed) return;

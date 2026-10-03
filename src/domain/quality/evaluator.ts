@@ -1,3 +1,4 @@
+import { scoreLanguagePreference } from './language.js';
 import type {
   QualityEvaluation,
   QualityUnknownPolicy,
@@ -9,16 +10,43 @@ export function evaluateCandidateQuality(input: {
   profile: ResolvedQualityProfile;
   observed: XtreamMediaQuality;
   policy: QualityUnknownPolicy;
+  /** When true, unprobed / unknown resolution is never compatible (VOD selection). */
+  requireProbeEvidence?: boolean;
+  preferredLanguages?: string[];
 }): QualityEvaluation {
   const { profile, observed, policy } = input;
+  const preferredLanguages = input.preferredLanguages?.length ? input.preferredLanguages : ['en'];
   const reasons: string[] = [];
   const unknowns: string[] = [];
   const c = profile.observableConstraints;
   let score = 0;
   let compatible = true;
 
+  const lang = scoreLanguagePreference({
+    preferredLanguages,
+    catalogueLanguage: observed.language,
+    audioLanguages: observed.audioLanguages,
+  });
+  reasons.push(lang.reason);
+  score += lang.score;
+
+  if (input.requireProbeEvidence && !observed.probed) {
+    compatible = false;
+    reasons.push('probe evidence required; candidate not probed');
+  }
+
   if (observed.resolution == null) {
     unknowns.push('resolution');
+    if (input.requireProbeEvidence || policy === 'strict') {
+      compatible = false;
+      reasons.push(
+        input.requireProbeEvidence
+          ? 'resolution unknown after probe requirement'
+          : 'strict policy rejects unknown resolution',
+      );
+    } else {
+      reasons.push('resolution unknown; allow policy keeps candidate');
+    }
   } else if (!c.allowedResolutions.includes(observed.resolution)) {
     compatible = false;
     reasons.push(`resolution ${observed.resolution} not allowed by profile ${profile.name}`);
@@ -36,7 +64,6 @@ export function evaluateCandidateQuality(input: {
       (q) => q.source && q.source.toLowerCase().includes(observed.source!.toLowerCase()),
     );
     if (!sourceAllowed && profile.allowedQualities.some((q) => q.source)) {
-      // Soft: many IPTV titles lack precise source; only hard-fail in strict when source claimed but unmatched
       reasons.push(`source ${observed.source} not clearly in profile ladder`);
       score -= 50;
     } else if (sourceAllowed) {
@@ -67,20 +94,33 @@ export function evaluateCandidateQuality(input: {
     reasons.push('HDR required but not observed');
   }
 
-  if (unknowns.includes('releaseGroup') === false) {
-    // always unknown from Xtream
+  if (observed.probed) {
+    reasons.push('ffprobe evidence present');
+    score += 2_000;
+  }
+
+  if (!unknowns.includes('releaseGroup')) {
     unknowns.push('releaseGroup');
   }
 
-  if (policy === 'strict') {
+  // Strict: unknown source still matters when no probe proved resolution.
+  if (policy === 'strict' && !input.requireProbeEvidence) {
     const importantUnknowns = unknowns.filter((u) => u === 'resolution' || u === 'source');
     if (importantUnknowns.length) {
       compatible = false;
       reasons.push(`strict policy rejects unknowns: ${importantUnknowns.join(', ')}`);
     }
-  } else if (observed.resolution == null && c.allowedResolutions.length > 0) {
-    // allow: resolution unknown — do not auto-reject
-    reasons.push('resolution unknown; allow policy keeps candidate');
+  }
+
+  // With probe evidence, unknown source alone must not veto under allow policy.
+  if (
+    policy === 'strict' &&
+    input.requireProbeEvidence &&
+    unknowns.includes('source') &&
+    observed.resolution == null
+  ) {
+    compatible = false;
+    reasons.push('strict policy rejects unknown source without resolution');
   }
 
   if (!compatible) score = Math.min(score, -1);
@@ -90,13 +130,21 @@ export function evaluateCandidateQuality(input: {
     score,
     reasons,
     unknowns: [...new Set(unknowns)],
+    languageScore: lang.score,
     observed: {
       resolution: observed.resolution,
       codec: observed.codec,
       source: observed.source,
       hdr: observed.hdr,
       dolbyVision: observed.dolbyVision,
+      language: observed.language,
+      audioLanguages: observed.audioLanguages,
+      platform: observed.platform,
+      width: observed.width,
+      height: observed.height,
+      bitrate: observed.bitrate,
       confidence: observed.confidence,
+      probed: observed.probed,
     },
   };
 }

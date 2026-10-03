@@ -7,7 +7,9 @@ import { matchMedia } from '../../domain/matching/matcher.js';
 import type { MatchCandidate } from '../../domain/matching/types.js';
 import { evaluateCandidateQuality, pickBestCompatible } from '../../domain/quality/evaluator.js';
 import { parseXtreamQuality } from '../../domain/quality/parser.js';
-import type { QualityDecision } from '../../domain/quality/types.js';
+import { mergeProbeIntoQuality } from '../../domain/quality/probe-merge.js';
+import { buildProbeShortlist, shouldStopProbing } from '../../domain/quality/shortlist.js';
+import type { QualityDecision, QualityEvaluation } from '../../domain/quality/types.js';
 import { isTerminalState, type JobState } from '../../domain/state-machine/states.js';
 import type { BridgeRepository } from '../../db/repository.js';
 import type { JobRow, RequestRow } from '../../db/schema.js';
@@ -16,6 +18,7 @@ import type { Logger } from '../../logging/logger.js';
 import type { Metrics } from '../../metrics/metrics.js';
 import type { ProviderActivityService } from '../provider-activity.js';
 import type { QualityProfileResolverService } from '../quality-profile-resolver.js';
+import type { XtreamMediaProbe } from '../xtream-media-probe.js';
 
 /** Seerr MediaRequestStatus */
 const SEERR_PENDING = 1;
@@ -34,6 +37,7 @@ export class AcquisitionEngine {
     private readonly jellyfin: JellyfinClient,
     private readonly qualityResolver: QualityProfileResolverService,
     private readonly providerActivity: ProviderActivityService,
+    private readonly mediaProbe: XtreamMediaProbe,
     private readonly log: Logger,
     private readonly metrics?: Metrics,
   ) {}
@@ -332,42 +336,15 @@ export class AcquisitionEngine {
       },
     });
 
-    const evaluated = match.candidates.map((c) => {
-      const observed = parseXtreamQuality({
-        name: c.name,
-        containerExtension: c.containerExtension,
-      });
-      const evaluation = evaluateCandidateQuality({
-        profile,
-        observed,
-        policy: this.config.QUALITY_UNKNOWN_POLICY,
-      });
-      return {
-        candidate: c,
-        evaluation,
-        tieKey: `${c.sourceId}:${c.streamId ?? c.seriesId ?? c.name}`,
-      };
-    });
+    const best =
+      request.mediaType === 'movie'
+        ? await this.selectProbedVodCandidate(job, request, match.candidates, profile, ctx)
+        : this.selectCatalogueCandidate(match.candidates, profile, ctx);
 
-    const best = pickBestCompatible(evaluated);
     if (!best) {
       this.metrics?.xtreamMisses.inc({ reason: 'quality_incompatible' });
-      this.log.info(
-        {
-          ...ctx,
-          profile: profile.name,
-          evaluations: evaluated.map((e) => ({
-            candidate: e.candidate.name,
-            compatible: e.evaluation.compatible,
-            reasons: e.evaluation.reasons,
-            unknowns: e.evaluation.unknowns,
-          })),
-        },
-        'no quality-compatible candidate',
-      );
       this.repo.transitionJob(job.id, 'FALLBACK_PENDING', {
         reason: 'quality_incompatible',
-        meta: { evaluations: evaluated.map((e) => ({ name: e.candidate.name, ...e.evaluation })) },
       });
       return;
     }
@@ -389,11 +366,20 @@ export class AcquisitionEngine {
       {
         ...ctx,
         profile: profile.name,
-        candidate: best.candidate.name,
+        candidateId: best.candidate.streamId ?? best.candidate.seriesId,
+        candidateName: best.candidate.name,
+        sourceId: best.candidate.sourceId,
+        sourceName: best.candidate.sourceName,
         compatible: true,
-        observed: best.evaluation.observed,
-        unknown: best.evaluation.unknowns,
+        width: best.evaluation.observed.width,
+        height: best.evaluation.observed.height,
+        resolution: best.evaluation.observed.resolution,
+        codec: best.evaluation.observed.codec,
+        bitrate: best.evaluation.observed.bitrate,
+        audioLanguages: best.evaluation.observed.audioLanguages,
+        rejectionReasons: [],
         reasons: best.evaluation.reasons,
+        selectionWhy: best.why,
       },
       'selected xtream candidate',
     );
@@ -421,6 +407,222 @@ export class AcquisitionEngine {
       status: 'selected',
       seasonNumber: request.mediaType === 'tv' ? (this.seasonsOf(request)[0] ?? null) : null,
     });
+  }
+
+  private selectCatalogueCandidate(
+    candidates: MatchCandidate[],
+    profile: Awaited<ReturnType<QualityProfileResolverService['resolve']>>,
+    ctx: Record<string, unknown>,
+  ): { candidate: MatchCandidate; evaluation: QualityEvaluation; why: string } | undefined {
+    const evaluated = candidates.map((c) => {
+      const observed = parseXtreamQuality({
+        name: c.name,
+        group: c.group,
+        containerExtension: c.containerExtension,
+      });
+      const evaluation = evaluateCandidateQuality({
+        profile,
+        observed,
+        policy: this.config.QUALITY_UNKNOWN_POLICY,
+        preferredLanguages: this.config.XTREAM_PREFERRED_LANGUAGES,
+      });
+      return {
+        candidate: c,
+        evaluation,
+        tieKey: `${c.sourceId}:${c.streamId ?? c.seriesId ?? c.name}`,
+      };
+    });
+    const best = pickBestCompatible(evaluated);
+    if (!best) {
+      this.log.info(
+        {
+          ...ctx,
+          profile: profile.name,
+          evaluations: evaluated.map((e) => ({
+            candidate: e.candidate.name,
+            compatible: e.evaluation.compatible,
+            reasons: e.evaluation.reasons,
+          })),
+        },
+        'no quality-compatible series candidate',
+      );
+      return undefined;
+    }
+    return {
+      candidate: best.candidate,
+      evaluation: best.evaluation,
+      why: `catalogue evaluation score=${best.evaluation.score}`,
+    };
+  }
+
+  private async selectProbedVodCandidate(
+    job: JobRow,
+    request: RequestRow,
+    candidates: MatchCandidate[],
+    profile: Awaited<ReturnType<QualityProfileResolverService['resolve']>>,
+    ctx: Record<string, unknown>,
+  ): Promise<
+    { candidate: MatchCandidate; evaluation: QualityEvaluation; why: string } | undefined
+  > {
+    const preferredLanguages = this.config.XTREAM_PREFERRED_LANGUAGES;
+    const shortlist = buildProbeShortlist({
+      candidates,
+      preferredLanguages,
+      profile,
+      maxProbes: this.config.XTREAM_MAX_CANDIDATE_PROBES,
+    });
+
+    this.log.info(
+      {
+        ...ctx,
+        profile: profile.name,
+        profileId: profile.profileId,
+        candidateCount: candidates.length,
+        shortlist: shortlist.map((s) => ({
+          id: s.candidate.streamId,
+          name: s.candidate.name,
+          languageScore: s.languageScore,
+          catalogueLanguage: s.catalogueLanguage,
+        })),
+        maxProbes: this.config.XTREAM_MAX_CANDIDATE_PROBES,
+      },
+      'xtream probe shortlist',
+    );
+
+    type ProbedEval = {
+      candidate: MatchCandidate;
+      evaluation: QualityEvaluation;
+      tieKey: string;
+    };
+    const probedCompatible: ProbedEval[] = [];
+    let probesUsed = 0;
+
+    for (const entry of shortlist) {
+      const c = entry.candidate;
+      if (!c.streamId) continue;
+
+      const sourceRoute = await this.xtream.resolveSourceRoute(c.sourceId);
+      if (!sourceRoute) {
+        this.log.warn(
+          {
+            ...ctx,
+            candidateId: c.streamId,
+            candidateName: c.name,
+            sourceId: c.sourceId,
+            probeResult: 'no_source_route',
+          },
+          'skip candidate: XtreamFilter source has no route',
+        );
+        continue;
+      }
+
+      probesUsed += 1;
+      const { urlRedacted, outcome } = await this.mediaProbe.probeVodCandidate({
+        sourceRoute,
+        streamId: c.streamId,
+        containerExtension: c.containerExtension,
+      });
+
+      if (!outcome.ok) {
+        this.log.info(
+          {
+            ...ctx,
+            requestId: request.seerrRequestId,
+            jobId: job.id,
+            tmdbId: request.tmdbId,
+            candidateId: c.streamId,
+            candidateName: c.name,
+            sourceId: c.sourceId,
+            sourceName: c.sourceName,
+            probeResult: outcome.reason,
+            probeUrl: urlRedacted,
+            rejectionReasons: [outcome.reason],
+          },
+          'xtream candidate probe failed',
+        );
+        continue;
+      }
+
+      const catalogue = parseXtreamQuality({
+        name: c.name,
+        group: c.group,
+        containerExtension: c.containerExtension,
+      });
+      const observed = mergeProbeIntoQuality(catalogue, outcome);
+      const evaluation = evaluateCandidateQuality({
+        profile,
+        observed,
+        policy: this.config.QUALITY_UNKNOWN_POLICY,
+        requireProbeEvidence: true,
+        preferredLanguages,
+      });
+
+      this.log.info(
+        {
+          ...ctx,
+          requestId: request.seerrRequestId,
+          jobId: job.id,
+          tmdbId: request.tmdbId,
+          candidateId: c.streamId,
+          candidateName: c.name,
+          sourceId: c.sourceId,
+          sourceName: c.sourceName,
+          probeResult: 'ok',
+          width: outcome.video?.width,
+          height: outcome.video?.height,
+          resolution: outcome.resolution,
+          codec: outcome.video?.codec,
+          bitrate: outcome.formatBitrate ?? outcome.video?.bitrate,
+          audioLanguages: outcome.audioTracks.map((a) => a.language).filter(Boolean),
+          compatible: evaluation.compatible,
+          rejectionReasons: evaluation.compatible ? [] : evaluation.reasons,
+          reasons: evaluation.reasons,
+        },
+        'xtream candidate probed',
+      );
+
+      if (!evaluation.compatible) continue;
+
+      probedCompatible.push({
+        candidate: c,
+        evaluation,
+        tieKey: `${c.sourceId}:${c.streamId}`,
+      });
+
+      if (
+        shouldStopProbing({
+          preferredLanguages,
+          selectedLanguageScore: evaluation.languageScore ?? entry.languageScore,
+          compatible: true,
+        })
+      ) {
+        this.log.info(
+          { ...ctx, candidateId: c.streamId, probesUsed },
+          'stopping probe shortlist early (preferred language + compatible)',
+        );
+        break;
+      }
+    }
+
+    const best = pickBestCompatible(probedCompatible);
+    if (!best) {
+      this.log.info(
+        {
+          ...ctx,
+          profile: profile.name,
+          probesUsed,
+          shortlistSize: shortlist.length,
+        },
+        'no safely validated xtream candidate after probing',
+      );
+      return undefined;
+    }
+
+    return {
+      candidate: best.candidate,
+      evaluation: best.evaluation,
+      why: `probed+compatible score=${best.evaluation.score}; probesUsed=${probesUsed}; ${best.evaluation.reasons.slice(0, 4).join('; ')}`,
+    };
   }
 
   private async tvScopeComplete(

@@ -23,6 +23,10 @@ services:
       XTREAM_PARTIAL_POLICY: all_or_nothing
       QUALITY_UNKNOWN_POLICY: allow
       QUALITY_PROFILE_CACHE_TTL_SECONDS: 300
+      XTREAM_PREFERRED_LANGUAGES: en
+      XTREAM_MAX_CANDIDATE_PROBES: 5
+      XTREAM_PROBE_TIMEOUT_MS: 15000
+      FFPROBE_PATH: ffprobe
     volumes:
       - seerr-xtream-bridge-data:/data
     # Do NOT put this service behind Gluetun.

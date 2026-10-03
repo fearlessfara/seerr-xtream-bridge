@@ -105,8 +105,20 @@ export const XtreamSeriesEpisodesSchema = z
 export const XtreamSourceSchema = z
   .object({
     id: z.string(),
-    name: z.string(),
+    name: z.string().optional(),
     enabled: z.boolean().optional(),
+    /** XtreamFilter dedicated proxy route slug (e.g. "strong"). */
+    route: z.string().optional().nullable(),
+    prefix: z.string().optional().nullable(),
     max_connections: z.number().optional(),
   })
   .passthrough();
+
+export const XtreamSourcesResponseSchema = z.union([
+  z.array(XtreamSourceSchema),
+  z
+    .object({
+      sources: z.array(XtreamSourceSchema).default([]),
+    })
+    .passthrough(),
+]);

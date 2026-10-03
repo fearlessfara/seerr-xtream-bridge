@@ -18,6 +18,10 @@ FROM node:24-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 
+# ffmpeg package provides ffprobe for VOD candidate media probing.
+RUN apk add --no-cache ffmpeg \
+  && ffprobe -version
+
 RUN addgroup -S bridge && adduser -S bridge -G bridge \
   && mkdir -p /data && chown -R bridge:bridge /data /app
 

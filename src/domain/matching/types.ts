@@ -7,6 +7,7 @@ export interface MatchCandidate {
   streamId?: string;
   seriesId?: string;
   name: string;
+  group?: string;
   tmdbId?: string | number | null;
   year?: number;
   contentType: 'vod' | 'series';

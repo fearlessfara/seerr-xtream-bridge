@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fixture, withTestApp, baseRoutes } from './helpers.js';
+import { createTestFfprobeExecutor, fixture, withTestApp, baseRoutes } from './helpers.js';
 
 const webhook = fixture('seerr/webhook-movie-pending.json');
 
@@ -81,12 +81,13 @@ describe('integration movie flows', () => {
     const browse = {
       items: [
         {
-          name: 'Dune 2021 2160p HDR',
+          name: 'EN - Dune 2021 2160p HDR',
           id: '9002',
           source_id: 'abcd1234',
           source_name: 'Strong 8K',
           tmdb_id: '693134',
           content_type: 'vod',
+          container_extension: 'mkv',
         },
       ],
     };
@@ -96,7 +97,24 @@ describe('integration movie flows', () => {
       for (let i = 0; i < 12; i++) await ctx.engine.processJob(jobId);
       const job = ctx.repo.getJob(jobId)!;
       expect(job.state).toBe('HANDED_TO_ARR');
+      expect(ctx.repo.listEvents(jobId).some((e) => e.toState === 'XTREAM_QUEUED')).toBe(false);
     });
+  });
+
+  it('falls back when probes fail and does not queue Xtream cart', async () => {
+    await withTestApp(
+      baseRoutes(),
+      async (ctx, app) => {
+        const res = await postWebhook(app);
+        const jobId = res.json().jobId as number;
+        for (let i = 0; i < 12; i++) await ctx.engine.processJob(jobId);
+        const job = ctx.repo.getJob(jobId)!;
+        expect(job.state).toBe('HANDED_TO_ARR');
+        expect(ctx.repo.listEvents(jobId).some((e) => e.toState === 'XTREAM_QUEUED')).toBe(false);
+      },
+      {},
+      createTestFfprobeExecutor({ failStreamIds: ['9001', '9002'] }),
+    );
   });
 
   it('dedupes duplicate webhooks into one job', async () => {

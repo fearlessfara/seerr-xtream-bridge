@@ -32,6 +32,21 @@ const envSchema = z.object({
     .default('all_or_nothing'),
   QUALITY_UNKNOWN_POLICY: z.enum(['allow', 'strict']).default('allow'),
   QUALITY_PROFILE_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+  /** Comma-separated preferred catalogue/audio languages (e.g. en,en-gb). */
+  XTREAM_PREFERRED_LANGUAGES: z
+    .string()
+    .default('en')
+    .transform((v) =>
+      v
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  /** Max sequential ffprobe attempts per request (connection-limit safe). */
+  XTREAM_MAX_CANDIDATE_PROBES: z.coerce.number().int().positive().default(5),
+  /** Per-candidate ffprobe timeout (ms). */
+  XTREAM_PROBE_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+  FFPROBE_PATH: z.string().default('ffprobe'),
   HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(1_048_576),
   METRICS_REQUIRE_AUTH: boolish.default(false),
