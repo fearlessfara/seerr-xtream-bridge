@@ -1,0 +1,21 @@
+{
+  "Items": [
+    {
+      "Id": "jf-shawshank",
+      "Name": "The Shawshank Redemption",
+      "Type": "Movie",
+      "Path": "/media/movies/shawshank.mkv",
+      "ProviderIds": { "Tmdb": "278" },
+      "MediaSources": [{ "Path": "/media/movies/shawshank.mkv" }]
+    },
+    {
+      "Id": "jf-br2049",
+      "Name": "Blade Runner 2049",
+      "Type": "Movie",
+      "Path": "/media/iptv/Films/Blade Runner 2049 (2017)/br2049.mkv",
+      "ProviderIds": { "Tmdb": "335984" },
+      "MediaSources": [{ "Path": "/media/iptv/Films/Blade Runner 2049 (2017)/br2049.mkv" }]
+    }
+  ],
+  "TotalRecordCount": 2
+}

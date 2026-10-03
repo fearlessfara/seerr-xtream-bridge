@@ -7,7 +7,22 @@ import {
 } from './schemas/jellyfin.js';
 import type { z } from 'zod';
 
-type JellyfinItem = z.infer<typeof JellyfinItemSchema>;
+export type JellyfinItem = z.infer<typeof JellyfinItemSchema>;
+
+/** Exact TMDb identity — never trust Jellyfin server-side AnyProviderIdEquals alone. */
+export function itemMatchesTmdb(item: JellyfinItem, tmdbId: number): boolean {
+  const providers = item.ProviderIds ?? {};
+  const raw = providers.Tmdb ?? providers.TmdbId ?? providers.TheMovieDb;
+  if (raw == null || raw === '') return false;
+  return String(raw).replace(/^tmdb:/i, '') === String(tmdbId);
+}
+
+/** Prefer evidence of local/playable media, not a metadata-only stub. */
+export function hasPlayableMedia(item: JellyfinItem): boolean {
+  if (typeof item.Path === 'string' && item.Path.trim().length > 0) return true;
+  const sources = item.MediaSources ?? [];
+  return sources.some((s) => typeof s.Path === 'string' && s.Path.trim().length > 0);
+}
 
 export class JellyfinClient {
   private readonly http: HttpClient;
@@ -36,30 +51,34 @@ export class JellyfinClient {
     await this.http.request('POST', '/Library/Refresh', { allowStatuses: [200, 204] });
   }
 
+  /**
+   * Query Jellyfin for TMDb candidates, then locally filter to exact ProviderIds.Tmdb matches.
+   * Server-side AnyProviderIdEquals is an optimization only — Jellyfin 12 may ignore it.
+   */
   async findByTmdb(tmdbId: number, itemTypes?: string[]): Promise<JellyfinItem[]> {
-    const attempts = [`Tmdb.${tmdbId}`, `Tmdb.${tmdbId}`, `TheMovieDb.${tmdbId}`, String(tmdbId)];
-    const found: JellyfinItem[] = [];
-    const seen = new Set<string>();
+    const { data } = await this.http.request('GET', '/Items', {
+      query: {
+        Recursive: true,
+        // Optimization hint only — results are always identity-filtered locally.
+        AnyProviderIdEquals: `Tmdb.${tmdbId}`,
+        IncludeItemTypes: itemTypes?.join(','),
+        Fields: 'ProviderIds,Path,MediaSources',
+      },
+      schema: JellyfinItemsResponseSchema,
+    });
 
-    for (const key of [...new Set(attempts)]) {
-      const { data } = await this.http.request('GET', '/Items', {
-        query: {
-          Recursive: true,
-          AnyProviderIdEquals: key,
-          IncludeItemTypes: itemTypes?.join(','),
-          Fields: 'ProviderIds',
-        },
-        schema: JellyfinItemsResponseSchema,
-      });
-      for (const item of data.Items ?? []) {
-        if (!seen.has(item.Id)) {
-          seen.add(item.Id);
-          found.push(item as JellyfinItem);
-        }
-      }
-      if (found.length) break;
+    const matched = (data.Items ?? []).filter(
+      (item): item is JellyfinItem => itemMatchesTmdb(item as JellyfinItem, tmdbId),
+    );
+
+    const seen = new Set<string>();
+    const unique: JellyfinItem[] = [];
+    for (const item of matched) {
+      if (seen.has(item.Id)) continue;
+      seen.add(item.Id);
+      unique.push(item);
     }
-    return found;
+    return unique;
   }
 
   async getSeriesEpisodes(seriesId: string): Promise<JellyfinItem[]> {
@@ -67,7 +86,7 @@ export class JellyfinClient {
       'GET',
       `/Shows/${encodeURIComponent(seriesId)}/Episodes`,
       {
-        query: { Fields: 'ProviderIds' },
+        query: { Fields: 'ProviderIds,Path,MediaSources' },
         schema: JellyfinItemsResponseSchema,
       },
     );
@@ -76,7 +95,9 @@ export class JellyfinClient {
 
   async movieExists(tmdbId: number): Promise<boolean> {
     const items = await this.findByTmdb(tmdbId, ['Movie']);
-    return items.some((i) => i.Type === 'Movie' || !i.Type);
+    return items.some(
+      (i) => i.Type === 'Movie' && itemMatchesTmdb(i, tmdbId) && hasPlayableMedia(i),
+    );
   }
 
   async tvSeasonsPresent(
@@ -84,23 +105,29 @@ export class JellyfinClient {
     seasons: number[],
   ): Promise<{ present: boolean; seriesId?: string; missing: number[]; episodeGaps: string[] }> {
     const series = (await this.findByTmdb(tmdbId, ['Series'])).filter(
-      (i) => i.Type === 'Series' || !i.Type,
+      (i) => i.Type === 'Series' && itemMatchesTmdb(i, tmdbId),
     );
     if (!series.length) {
       return { present: false, missing: [...seasons], episodeGaps: ['series not found'] };
     }
-    const seriesId = series[0].Id;
+
+    // Prefer a series row that has playable evidence when available; otherwise first exact match.
+    const seriesItem = series.find((s) => hasPlayableMedia(s)) ?? series[0];
+    const seriesId = seriesItem.Id;
     const episodes = await this.getSeriesEpisodes(seriesId);
     const missing: number[] = [];
     const episodeGaps: string[] = [];
 
     for (const season of seasons) {
       const eps = episodes.filter(
-        (e) => e.ParentIndexNumber === season && (e.IndexNumber ?? 0) > 0,
+        (e) =>
+          e.ParentIndexNumber === season &&
+          (e.IndexNumber ?? 0) > 0 &&
+          hasPlayableMedia(e),
       );
       if (!eps.length) {
         missing.push(season);
-        episodeGaps.push(`season ${season}: no episodes`);
+        episodeGaps.push(`season ${season}: no playable episodes`);
       }
     }
 

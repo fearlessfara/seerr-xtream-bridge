@@ -4,10 +4,16 @@
       "Id": "jf-movie-1",
       "Name": "Dune",
       "Type": "Movie",
+      "Path": "/media/iptv/Films/Dune (2021)/Dune.mkv",
       "ProviderIds": {
         "Tmdb": "693134"
       },
-      "ProductionYear": 2021
+      "ProductionYear": 2021,
+      "MediaSources": [
+        {
+          "Path": "/media/iptv/Films/Dune (2021)/Dune.mkv"
+        }
+      ]
     }
   ],
   "TotalRecordCount": 1

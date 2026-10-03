@@ -226,8 +226,10 @@ Recyclarr syncs TRaSH guides into Radarr/Sonarr. It is **not** a bridge runtime 
 | ------------------ | --------------------------------------------------------- |
 | Auth               | `Authorization: MediaBrowser Token="<apiKey>"` (Jellyfin 12.x; `X-Emby-Token` returns 401) |
 | Refresh            | `POST /Library/Refresh`                                   |
-| Search by provider | `GET /Items?AnyProviderIdEquals=Tmdb.{id}` (and variants) |
-| TV episodes        | Item tree / `GET /Shows/{id}/Episodes`                    |
+| Search by provider | `GET /Items?AnyProviderIdEquals=Tmdb.{id}&Fields=ProviderIds,Path,MediaSources` |
+| TV episodes        | `GET /Shows/{id}/Episodes` with Path/MediaSources fields  |
+
+**Critical Jellyfin 12 behaviour:** `AnyProviderIdEquals=Tmdb.{id}` may return many unrelated items. The bridge **must** locally require `ProviderIds.Tmdb === String(tmdbId)` (plus playable Path/MediaSources). Server-side filters are never identity proof.
 
 Bridge invariant: **Jellyfin** is the source of truth that media exists. XtreamFilter cart completion alone is insufficient.
 

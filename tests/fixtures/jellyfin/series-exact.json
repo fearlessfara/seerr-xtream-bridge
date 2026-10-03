@@ -1,0 +1,19 @@
+{
+  "Items": [
+    {
+      "Id": "jf-wrong-show",
+      "Name": "Some Other Show",
+      "Type": "Series",
+      "ProviderIds": { "Tmdb": "1396" }
+    },
+    {
+      "Id": "jf-severance",
+      "Name": "Severance",
+      "Type": "Series",
+      "Path": "/media/iptv/Series/Severance",
+      "ProviderIds": { "Tmdb": "95396" },
+      "MediaSources": [{ "Path": "/media/iptv/Series/Severance" }]
+    }
+  ],
+  "TotalRecordCount": 2
+}

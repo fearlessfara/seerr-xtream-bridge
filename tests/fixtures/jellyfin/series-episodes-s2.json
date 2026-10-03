@@ -1,0 +1,23 @@
+{
+  "Items": [
+    {
+      "Id": "ep1",
+      "Name": "S02E01",
+      "Type": "Episode",
+      "ParentIndexNumber": 2,
+      "IndexNumber": 1,
+      "Path": "/media/iptv/Series/Severance/Season 02/S02E01.mkv",
+      "MediaSources": [{ "Path": "/media/iptv/Series/Severance/Season 02/S02E01.mkv" }]
+    },
+    {
+      "Id": "ep2",
+      "Name": "S02E02",
+      "Type": "Episode",
+      "ParentIndexNumber": 2,
+      "IndexNumber": 2,
+      "Path": "/media/iptv/Series/Severance/Season 02/S02E02.mkv",
+      "MediaSources": [{ "Path": "/media/iptv/Series/Severance/Season 02/S02E02.mkv" }]
+    }
+  ],
+  "TotalRecordCount": 2
+}
