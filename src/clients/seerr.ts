@@ -45,11 +45,17 @@ export class SeerrClient {
     mediaId: number,
     body?: { seasons?: Array<{ seasonNumber: number }>; is4k?: boolean },
   ) {
+    // Seerr expects JSON booleans (frontend sends boolean is4k). Do not stringify.
+    // seasons must be omitted for movies; only included for TV.
+    const payload: { is4k: boolean; seasons?: Array<{ seasonNumber: number }> } = {
+      is4k: Boolean(body?.is4k),
+    };
+    if (body?.seasons !== undefined) {
+      payload.seasons = body.seasons;
+    }
+
     const { data } = await this.http.request('POST', `/api/v1/media/${mediaId}/available`, {
-      body: {
-        is4k: body?.is4k ? 'true' : 'false',
-        seasons: body?.seasons ?? [],
-      },
+      body: payload,
       schema: SeerrMediaSchema,
     });
     return data;

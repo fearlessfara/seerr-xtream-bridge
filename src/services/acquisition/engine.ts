@@ -747,8 +747,10 @@ export class AcquisitionEngine {
       if (op?.status !== 'succeeded') {
         this.repo.beginOperation(opKey, job.id, { mediaId: seerrReq.media.id });
         await this.seerr.markMediaAvailable(seerrReq.media.id, {
-          seasons: seasons.map((seasonNumber) => ({ seasonNumber })),
-          is4k: seerrReq.is4k,
+          is4k: !!seerrReq.is4k,
+          ...(request.mediaType === 'tv'
+            ? { seasons: seasons.map((seasonNumber) => ({ seasonNumber })) }
+            : {}),
         });
         this.repo.completeOperation(opKey, 'succeeded', {});
       }
