@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { createTestFfprobeExecutor, fixture, withTestApp, baseRoutes } from './helpers.js';
+import {
+  createTestFfprobeExecutor,
+  fixture,
+  withTestApp,
+  baseRoutes,
+  type CartCapture,
+} from './helpers.js';
+import { flattenBrowseItems } from '../../src/clients/xtreamfilter.js';
+import { XtreamBrowseResponseSchema } from '../../src/clients/schemas/xtreamfilter.js';
 
 const webhook = fixture('seerr/webhook-movie-pending.json');
 
@@ -25,7 +33,8 @@ async function postWebhook(
 describe('integration movie flows', () => {
   it('queues xtream movie once and completes via jellyfin', async () => {
     let jellyfinHas = false;
-    const routes = baseRoutes({ cartStatus: 'completed' }).map((r) => {
+    const cartCapture: CartCapture = {};
+    const routes = baseRoutes({ cartStatus: 'completed', cartCapture }).map((r) => {
       if (r.match('http://x/Items', 'GET')) {
         return {
           ...r,
@@ -74,6 +83,45 @@ describe('integration movie flows', () => {
       job = ctx.repo.getJob(jobId)!;
       expect(job.state).toBe('COMPLETED');
       expect(job.qualityDecision).toBeTruthy();
+      const decision = JSON.parse(job.qualityDecision!) as {
+        containerExtension?: string;
+        candidateId?: string;
+      };
+      expect(decision.containerExtension).toBe('mkv');
+      expect(decision.candidateId).toBe('9001');
+      expect(cartCapture.lastBody?.container_extension).toBe('mkv');
+      expect(cartCapture.lastBody?.container_extension).not.toBe('mp4');
+    });
+  });
+
+  it('propagates browse container_extension=mp4 into cart POST (not hardcoded mkv)', async () => {
+    const cartCapture: CartCapture = {};
+    const browse = {
+      items: [
+        {
+          name: 'EN - Dune 2021 1080p',
+          id: '9001',
+          source_id: 'abcd1234',
+          source_name: 'Strong 8K',
+          tmdb_id: '693134',
+          content_type: 'vod',
+          container_extension: 'mp4',
+        },
+      ],
+    };
+    const flat = flattenBrowseItems(XtreamBrowseResponseSchema.parse(browse));
+    expect(flat[0]?.containerExtension).toBe('mp4');
+
+    await withTestApp(baseRoutes({ browse, cartCapture }), async (ctx, app) => {
+      const res = await postWebhook(app);
+      const jobId = res.json().jobId as number;
+      for (let i = 0; i < 10; i++) await ctx.engine.processJob(jobId);
+      const job = ctx.repo.getJob(jobId)!;
+      expect(['XTREAM_QUEUED', 'XTREAM_DOWNLOADING', 'WAITING_FOR_JELLYFIN']).toContain(job.state);
+      const decision = JSON.parse(job.qualityDecision!) as { containerExtension?: string };
+      expect(decision.containerExtension).toBe('mp4');
+      expect(cartCapture.lastBody?.container_extension).toBe('mp4');
+      expect(cartCapture.lastBody?.stream_id).toBe('9001');
     });
   });
 

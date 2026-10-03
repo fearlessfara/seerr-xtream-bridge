@@ -144,12 +144,15 @@ export async function withTestApp(
   }
 }
 
+export type CartCapture = { lastBody?: Record<string, unknown> };
+
 export function baseRoutes(opts?: {
   jellyfinHasMovie?: boolean;
   cartStatus?: string;
   browse?: unknown;
   requestOverrides?: Record<string, unknown>;
   radarrProfileFail?: boolean;
+  cartCapture?: CartCapture;
 }): MockRoute[] {
   let request = {
     ...fixture<Record<string, unknown>>('seerr/request-movie-pending.json'),
@@ -212,12 +215,14 @@ export function baseRoutes(opts?: {
       match: (u, m) => m === 'POST' && u.endsWith('/api/cart'),
       handler: (_u, _m, body) => {
         const b = body as Record<string, unknown>;
+        if (opts?.cartCapture) opts.cartCapture.lastBody = b;
         const item = {
           id: 'c1',
           source_id: b.source_id,
           stream_id: b.stream_id,
           content_type: b.content_type,
           name: b.name,
+          container_extension: b.container_extension,
           status: opts?.cartStatus ?? 'completed',
         };
         const exists = cartItems.some(

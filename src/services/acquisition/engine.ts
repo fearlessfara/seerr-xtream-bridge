@@ -18,7 +18,7 @@ import type { Logger } from '../../logging/logger.js';
 import type { Metrics } from '../../metrics/metrics.js';
 import type { ProviderActivityService } from '../provider-activity.js';
 import type { QualityProfileResolverService } from '../quality-profile-resolver.js';
-import type { XtreamMediaProbe } from '../xtream-media-probe.js';
+import { optionalContainerExtension, type XtreamMediaProbe } from '../xtream-media-probe.js';
 
 /** Seerr MediaRequestStatus */
 const SEERR_PENDING = 1;
@@ -349,6 +349,7 @@ export class AcquisitionEngine {
       return;
     }
 
+    const containerExtension = optionalContainerExtension(best.candidate.containerExtension);
     const decision: QualityDecision = {
       profile: {
         source: profile.source,
@@ -357,6 +358,8 @@ export class AcquisitionEngine {
         name: profile.name,
       },
       candidateName: best.candidate.name,
+      candidateId: best.candidate.streamId ?? best.candidate.seriesId,
+      containerExtension,
       evaluation: best.evaluation,
       policy: this.config.QUALITY_UNKNOWN_POLICY,
       selectedAt: new Date().toISOString(),
@@ -710,11 +713,13 @@ export class AcquisitionEngine {
     }
 
     if (request.mediaType === 'movie') {
+      const decision = this.readQualityDecision(job);
       await this.queueMovie(
         job,
         selected.sourceId,
         String(selected.streamId),
         selected.name ?? 'movie',
+        decision?.containerExtension ?? undefined,
       );
     } else {
       await this.queueTvSeasons(
@@ -727,7 +732,22 @@ export class AcquisitionEngine {
     }
   }
 
-  private async queueMovie(job: JobRow, sourceId: string, streamId: string, name: string) {
+  private readQualityDecision(job: JobRow): QualityDecision | undefined {
+    if (!job.qualityDecision) return undefined;
+    try {
+      return JSON.parse(job.qualityDecision) as QualityDecision;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async queueMovie(
+    job: JobRow,
+    sourceId: string,
+    streamId: string,
+    name: string,
+    containerExtension?: string,
+  ) {
     const opKey = `queue:seerr:${this.repo.getRequest(job.requestId)!.seerrRequestId}:movie:${job.tmdbId}`;
     const existing = this.repo.getOperation(opKey);
     if (existing?.status === 'succeeded') {
@@ -735,7 +755,13 @@ export class AcquisitionEngine {
       return;
     }
 
-    this.repo.beginOperation(opKey, job.id, { sourceId, streamId, name });
+    const ext = optionalContainerExtension(containerExtension);
+    this.repo.beginOperation(opKey, job.id, {
+      sourceId,
+      streamId,
+      name,
+      containerExtension: ext,
+    });
     const cartBefore = await this.xtream.listCart();
     const already = this.xtream.findCartMovie(cartBefore, sourceId, streamId);
     if (already) {
@@ -747,12 +773,17 @@ export class AcquisitionEngine {
       return;
     }
 
-    const res = await this.xtream.addToCart({
+    const cartBody: Record<string, unknown> = {
       source_id: sourceId,
       stream_id: streamId,
       content_type: 'vod',
       name,
-    });
+    };
+    if (ext) {
+      cartBody.container_extension = ext;
+    }
+
+    const res = await this.xtream.addToCart(cartBody);
 
     if (res.status === 409) {
       const cart = await this.xtream.listCart();

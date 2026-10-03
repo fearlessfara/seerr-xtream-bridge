@@ -95,6 +95,16 @@ export function sanitizeContainerExtension(ext?: string | null): string {
   return e;
 }
 
+/** Sanitize when present; return undefined to omit the field (never invent an extension). */
+export function optionalContainerExtension(ext?: string | null): string | undefined {
+  if (ext == null || !String(ext).trim()) return undefined;
+  try {
+    return sanitizeContainerExtension(ext);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Build XtreamFilter source-specific VOD proxy URL.
  * Uses literal user/pass placeholders accepted by XtreamFilter — not provider credentials.

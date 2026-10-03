@@ -86,6 +86,10 @@ export interface QualityEvaluation {
 export interface QualityDecision {
   profile: Pick<ResolvedQualityProfile, 'source' | 'serverId' | 'profileId' | 'name'>;
   candidateName: string;
+  /** Browse leaf stream/series id for the selected candidate. */
+  candidateId?: string;
+  /** Exact container_extension from /api/browse (e.g. mkv), when known. */
+  containerExtension?: string;
   evaluation: QualityEvaluation;
   policy: QualityUnknownPolicy;
   selectedAt: string;
