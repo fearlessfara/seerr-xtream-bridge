@@ -30,9 +30,18 @@ describe('fixture schema parsing', () => {
     expect(ArrQualityProfileSchema.parse(raw).id).toBe(6);
   });
 
-  it('parses xtream browse', () => {
+  it('parses xtream browse flat', () => {
     const raw = JSON.parse(readFileSync(join(root, 'xtreamfilter/browse-movie.json'), 'utf8'));
     expect(XtreamBrowseResponseSchema.parse(raw).items.length).toBe(2);
+  });
+
+  it('parses xtream browse grouped:true with nested items', () => {
+    const raw = JSON.parse(
+      readFileSync(join(root, 'xtreamfilter/browse-zootopia-grouped.json'), 'utf8'),
+    );
+    const parsed = XtreamBrowseResponseSchema.parse(raw);
+    expect(parsed.grouped).toBe(true);
+    expect(parsed.items).toHaveLength(1);
   });
 
   it('parses jellyfin items', () => {

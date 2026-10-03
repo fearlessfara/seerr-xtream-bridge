@@ -1,24 +1,46 @@
 import { z } from 'zod';
 
+/** Playable browse leaf (stream / series entry). */
 export const XtreamBrowseItemSchema = z
   .object({
-    name: z.string(),
     id: z.union([z.string(), z.number()]),
     source_id: z.string(),
     source_name: z.string().optional(),
-    tmdb_id: z.union([z.string(), z.number()]).nullable().optional(),
-    content_type: z.string().optional(),
-    container_extension: z.string().optional(),
+    // Nested grouped leaves often omit name; inherit from parent group when flattening.
+    name: z.string().optional(),
     group: z.string().optional(),
+    content_type: z.string().optional(),
+    tmdb_id: z.union([z.string(), z.number()]).nullable().optional(),
+    container_extension: z.string().optional().nullable(),
+    downloaded: z.boolean().optional(),
+    rating: z.number().nullable().optional(),
+    added: z.union([z.string(), z.number()]).nullable().optional(),
     icon: z.string().optional(),
   })
   .passthrough();
 
+/** TMDb/title grouping wrapper used when browse returns grouped:true. */
+export const XtreamBrowseGroupSchema = z
+  .object({
+    name: z.string(),
+    items: z.array(XtreamBrowseItemSchema),
+    count: z.number().optional(),
+    tmdb_id: z.union([z.string(), z.number()]).nullable().optional(),
+  })
+  .passthrough();
+
+export const XtreamBrowseEntrySchema = z.union([XtreamBrowseGroupSchema, XtreamBrowseItemSchema]);
+
 export const XtreamBrowseResponseSchema = z
   .object({
-    items: z.array(z.unknown()).optional().default([]),
-    grouped: z.array(z.unknown()).optional(),
+    items: z.array(XtreamBrowseEntrySchema).optional().default([]),
+    // Live XtreamFilter returns boolean; older shapes may still use an array.
+    grouped: z.union([z.boolean(), z.array(z.unknown())]).optional(),
     total: z.number().optional(),
+    page: z.number().optional(),
+    per_page: z.number().optional(),
+    total_pages: z.number().optional(),
+    content_type: z.string().optional(),
   })
   .passthrough();
 

@@ -2,6 +2,7 @@ import type { AppConfig } from '../config.js';
 import { HttpClient } from '../lib/http.js';
 import type { MatchCandidate } from '../domain/matching/types.js';
 import {
+  XtreamBrowseGroupSchema,
   XtreamBrowseItemSchema,
   XtreamBrowseResponseSchema,
   XtreamCartListSchema,
@@ -11,42 +12,82 @@ import {
 } from './schemas/xtreamfilter.js';
 import { z } from 'zod';
 
-function flattenBrowseItems(data: z.infer<typeof XtreamBrowseResponseSchema>): MatchCandidate[] {
+type BrowseItem = z.infer<typeof XtreamBrowseItemSchema>;
+
+function toCandidate(item: BrowseItem, contentTypeHint?: string): MatchCandidate | undefined {
+  const ct = (item.content_type ?? contentTypeHint ?? '').toLowerCase();
+  const contentType = ct === 'series' ? 'series' : ct === 'vod' ? 'vod' : undefined;
+  if (!contentType) return undefined;
+  if (!item.name?.trim()) return undefined;
+
+  return {
+    sourceId: item.source_id,
+    sourceName: item.source_name,
+    streamId: contentType === 'vod' ? String(item.id) : undefined,
+    seriesId: contentType === 'series' ? String(item.id) : undefined,
+    name: item.name,
+    tmdbId: item.tmdb_id,
+    contentType,
+    containerExtension: item.container_extension ?? undefined,
+    raw: item,
+  };
+}
+
+function isBrowseGroup(entry: unknown): entry is z.infer<typeof XtreamBrowseGroupSchema> {
+  return XtreamBrowseGroupSchema.safeParse(entry).success;
+}
+
+/**
+ * Flatten grouped or ungrouped /api/browse payloads into playable leaf candidates.
+ * With grouped:true, items[] are TMDb/title groups and items[].items[] are variants.
+ */
+export function flattenBrowseItems(
+  data: z.infer<typeof XtreamBrowseResponseSchema>,
+): MatchCandidate[] {
   const out: MatchCandidate[] = [];
 
-  const pushItem = (raw: unknown, contentTypeHint?: string) => {
-    const parsed = XtreamBrowseItemSchema.safeParse(raw);
-    if (!parsed.success) return;
-    const item = parsed.data;
-    const ct = (item.content_type ?? contentTypeHint ?? '').toLowerCase();
-    const contentType = ct === 'series' ? 'series' : ct === 'vod' ? 'vod' : undefined;
-    if (!contentType) return;
-    out.push({
-      sourceId: item.source_id,
-      sourceName: item.source_name,
-      streamId: contentType === 'vod' ? String(item.id) : undefined,
-      seriesId: contentType === 'series' ? String(item.id) : undefined,
-      name: item.name,
-      tmdbId: item.tmdb_id,
-      contentType,
-      containerExtension: item.container_extension,
-      raw: item,
-    });
+  const pushLeaf = (leaf: BrowseItem, groupName?: string, groupTmdb?: string | number | null) => {
+    const merged: BrowseItem = {
+      ...leaf,
+      name: leaf.name?.trim() ? leaf.name : groupName,
+      tmdb_id: leaf.tmdb_id ?? groupTmdb ?? null,
+      // Keep language/quality tokens from the group title available to the quality parser.
+      group: leaf.group ?? groupName,
+    };
+    // Prefer a display name that includes distinguishing group tokens when the leaf name
+    // is missing or is a bare id-like stub; quality eval uses candidate.name.
+    if (
+      groupName &&
+      leaf.name &&
+      leaf.name !== groupName &&
+      !/\b(4k|2160|1080|720|hdr|hevc|x265)\b/i.test(leaf.name)
+    ) {
+      merged.name = `${groupName} ${leaf.name}`.trim();
+    } else if (groupName && !leaf.name?.trim()) {
+      merged.name = groupName;
+    }
+    const candidate = toCandidate(merged);
+    if (candidate) out.push(candidate);
   };
 
-  for (const item of data.items ?? []) {
-    if (item && typeof item === 'object' && 'items' in (item as object)) {
-      const group = item as { name?: string; items?: unknown[] };
-      for (const sub of group.items ?? []) pushItem(sub);
-    } else {
-      pushItem(item);
+  for (const entry of data.items ?? []) {
+    if (isBrowseGroup(entry)) {
+      for (const leaf of entry.items) {
+        pushLeaf(leaf, entry.name, entry.tmdb_id);
+      }
+      continue;
     }
+    const leaf = XtreamBrowseItemSchema.safeParse(entry);
+    if (leaf.success) pushLeaf(leaf.data);
   }
 
-  if (data.grouped) {
+  // Legacy: grouped as an array of groups (not boolean).
+  if (Array.isArray(data.grouped)) {
     for (const g of data.grouped) {
-      if (g && typeof g === 'object' && 'items' in (g as object)) {
-        for (const sub of (g as { items?: unknown[] }).items ?? []) pushItem(sub);
+      const group = XtreamBrowseGroupSchema.safeParse(g);
+      if (!group.success) continue;
+      for (const leaf of group.data.items) {
+        pushLeaf(leaf, group.data.name, group.data.tmdb_id);
       }
     }
   }
