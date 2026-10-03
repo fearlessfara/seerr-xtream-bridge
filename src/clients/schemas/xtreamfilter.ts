@@ -3,44 +3,49 @@ import { z } from 'zod';
 /** Playable browse leaf (stream / series entry). */
 export const XtreamBrowseItemSchema = z
   .object({
+    name: z.string().optional(),
+    group: z.string().optional(),
+    icon: z.string().optional().nullable(),
     id: z.union([z.string(), z.number()]),
     source_id: z.string(),
     source_name: z.string().optional(),
-    // Nested grouped leaves often omit name; inherit from parent group when flattening.
-    name: z.string().optional(),
-    group: z.string().optional(),
-    content_type: z.string().optional(),
-    tmdb_id: z.union([z.string(), z.number()]).nullable().optional(),
+    added: z.union([z.string(), z.number()]).optional().nullable(),
+    rating: z.number().optional().nullable(),
+    content_type: z.enum(['vod', 'series']).or(z.string()),
+    tmdb_id: z.union([z.string(), z.number()]).optional().nullable(),
     container_extension: z.string().optional().nullable(),
     downloaded: z.boolean().optional(),
-    rating: z.number().nullable().optional(),
-    added: z.union([z.string(), z.number()]).nullable().optional(),
-    icon: z.string().optional(),
+    categories: z.array(z.unknown()).optional(),
   })
   .passthrough();
 
-/** TMDb/title grouping wrapper used when browse returns grouped:true. */
+/** TMDb/title grouping wrapper returned when browse is grouped. */
 export const XtreamBrowseGroupSchema = z
   .object({
     name: z.string(),
+    icon: z.string().optional().nullable(),
     items: z.array(XtreamBrowseItemSchema),
     count: z.number().optional(),
-    tmdb_id: z.union([z.string(), z.number()]).nullable().optional(),
+    rating: z.number().optional().nullable(),
+    added: z.union([z.string(), z.number()]).optional().nullable(),
+    tmdb_id: z.union([z.string(), z.number()]).optional().nullable(),
+    downloaded: z.boolean().optional(),
   })
   .passthrough();
 
-export const XtreamBrowseEntrySchema = z.union([XtreamBrowseGroupSchema, XtreamBrowseItemSchema]);
-
 export const XtreamBrowseResponseSchema = z
   .object({
-    items: z.array(XtreamBrowseEntrySchema).optional().default([]),
-    // Live XtreamFilter returns boolean; older shapes may still use an array.
-    grouped: z.union([z.boolean(), z.array(z.unknown())]).optional(),
+    // Group first: leaf schema is passthrough and would otherwise accept nested `items`.
+    items: z.array(z.union([XtreamBrowseGroupSchema, XtreamBrowseItemSchema])).default([]),
+    grouped: z.boolean().optional(),
     total: z.number().optional(),
     page: z.number().optional(),
     per_page: z.number().optional(),
     total_pages: z.number().optional(),
     content_type: z.string().optional(),
+    // metadata returned by current XtreamFilter
+    groups: z.array(z.unknown()).optional(),
+    sources: z.array(z.unknown()).optional(),
   })
   .passthrough();
 

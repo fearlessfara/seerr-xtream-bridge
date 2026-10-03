@@ -2,59 +2,104 @@
   "items": [
     {
       "name": "DE - Zoomania",
+      "icon": "",
       "items": [
         {
+          "name": "DE - Zoomania",
+          "group": "DE - Zoomania",
+          "icon": "",
           "id": "70261",
           "source_id": "c31fa59e",
           "source_name": "Strong 8K",
-          "content_type": "vod",
-          "tmdb_id": "269149",
-          "container_extension": "mkv",
-          "downloaded": false
-        },
-        {
-          "id": "70262",
-          "source_id": "c31fa59e",
-          "source_name": "Strong 8K",
+          "added": null,
+          "rating": null,
           "content_type": "vod",
           "tmdb_id": "269149",
           "container_extension": "mkv",
           "downloaded": false,
-          "name": "Zootopia 2016 1080p WEB-DL"
+          "categories": []
         },
         {
-          "id": "70263",
+          "name": "EN - Zootopia (2016)",
+          "group": "DE - Zoomania",
+          "icon": "",
+          "id": "1834468",
           "source_id": "c31fa59e",
           "source_name": "Strong 8K",
+          "added": null,
+          "rating": null,
           "content_type": "vod",
           "tmdb_id": "269149",
           "container_extension": "mkv",
           "downloaded": false,
-          "name": "Zootopia 2016 2160p HDR"
+          "categories": []
         },
         {
-          "id": "70264",
+          "name": "D+ - Zootopia",
+          "group": "DE - Zoomania",
+          "icon": "",
+          "id": "70270",
           "source_id": "c31fa59e",
           "source_name": "Strong 8K",
+          "added": null,
+          "rating": null,
           "content_type": "vod",
           "tmdb_id": "269149",
           "container_extension": "mkv",
           "downloaded": false,
-          "name": "TR - Zootropolis 1080p"
+          "categories": []
         },
         {
-          "id": "70265",
+          "name": "4K-D+ - Zootopia",
+          "group": "DE - Zoomania",
+          "icon": "",
+          "id": "70271",
           "source_id": "c31fa59e",
           "source_name": "Strong 8K",
+          "added": null,
+          "rating": null,
           "content_type": "vod",
           "tmdb_id": "269149",
           "container_extension": "mkv",
           "downloaded": false,
-          "name": "Zootopia 2016 Disney+ 1080p HEVC"
+          "categories": []
+        },
+        {
+          "name": "ES - Zootrópolis",
+          "group": "DE - Zoomania",
+          "icon": "",
+          "id": "70273",
+          "source_id": "c31fa59e",
+          "source_name": "Strong 8K",
+          "added": null,
+          "rating": null,
+          "content_type": "vod",
+          "tmdb_id": "269149",
+          "container_extension": "mkv",
+          "downloaded": false,
+          "categories": []
+        },
+        {
+          "name": "TR - Zootopia",
+          "group": "DE - Zoomania",
+          "icon": "",
+          "id": "70274",
+          "source_id": "c31fa59e",
+          "source_name": "Strong 8K",
+          "added": null,
+          "rating": null,
+          "content_type": "vod",
+          "tmdb_id": "269149",
+          "container_extension": "mkv",
+          "downloaded": false,
+          "categories": []
         }
       ],
-      "count": 5,
-      "tmdb_id": "269149"
+      "count": 6,
+      "rating": null,
+      "added": null,
+      "tmdb_id": "269149",
+      "downloaded": false
     }
   ],
   "grouped": true,
@@ -62,5 +107,7 @@
   "page": 1,
   "per_page": 50,
   "total_pages": 1,
-  "content_type": "vod"
+  "content_type": "vod",
+  "groups": [],
+  "sources": []
 }

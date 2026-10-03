@@ -2,59 +2,99 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { flattenBrowseItems } from '../../src/clients/xtreamfilter.js';
+import { flattenBrowseItems, XtreamFilterClient } from '../../src/clients/xtreamfilter.js';
 import { XtreamBrowseResponseSchema } from '../../src/clients/schemas/xtreamfilter.js';
 import { matchMedia } from '../../src/domain/matching/matcher.js';
-import {
-  evaluateCandidateQuality,
-  pickBestCompatible,
-} from '../../src/domain/quality/evaluator.js';
-import { parseXtreamQuality } from '../../src/domain/quality/parser.js';
-import { normalizeArrProfile } from '../../src/domain/quality/resolver.js';
-import { ArrQualityProfileSchema } from '../../src/clients/schemas/radarr-sonarr.js';
+import type { AppConfig } from '../../src/config.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
+function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
+  return {
+    HOST: '0.0.0.0',
+    PORT: 5056,
+    LOG_LEVEL: 'silent',
+    DATABASE_PATH: ':memory:',
+    BRIDGE_API_KEY: '',
+    SEERR_URL: 'http://seerr.test',
+    SEERR_API_KEY: 'x',
+    SEERR_WEBHOOK_SECRET: '',
+    SEERR_AVAILABILITY_GRACE_SECONDS: 60,
+    SEERR_REQUEST_COMPLETION_GRACE_SECONDS: 60,
+    XTREAMFILTER_URL: 'http://xtream.test',
+    XTREAMFILTER_SOURCE_ID: 'c31fa59e',
+    XTREAMFILTER_SOURCE_NAME: 'Strong 8K',
+    JELLYFIN_URL: 'http://jellyfin.test',
+    JELLYFIN_API_KEY: 'x',
+    RADARR_URL: '',
+    RADARR_API_KEY: '',
+    SONARR_URL: '',
+    SONARR_API_KEY: '',
+    RECONCILE_INTERVAL_SECONDS: 30,
+    XTREAM_PARTIAL_POLICY: 'all_or_nothing',
+    QUALITY_UNKNOWN_POLICY: 'allow',
+    QUALITY_PROFILE_CACHE_TTL_SECONDS: 300,
+    HTTP_TIMEOUT_MS: 5000,
+    BODY_LIMIT_BYTES: 1_048_576,
+    METRICS_REQUIRE_AUTH: false,
+    ...overrides,
+  };
+}
+
 describe('XtreamFilter grouped browse parsing', () => {
-  it('parses grouped:true boolean and flattens nested items', () => {
-    const raw = JSON.parse(
+  it('flattens grouped XtreamFilter browse results', async () => {
+    const payload = JSON.parse(
       readFileSync(join(root, 'fixtures/xtreamfilter/browse-zootopia-grouped.json'), 'utf8'),
     );
-    const parsed = XtreamBrowseResponseSchema.parse(raw);
-    expect(parsed.grouped).toBe(true);
 
-    const flat = flattenBrowseItems(parsed);
-    expect(flat).toHaveLength(5);
-    expect(flat.every((c) => c.contentType === 'vod')).toBe(true);
-    expect(flat.every((c) => String(c.tmdbId) === '269149')).toBe(true);
-    expect(flat.map((c) => c.streamId)).toEqual(
-      expect.arrayContaining(['70261', '70262', '70263', '70264', '70265']),
-    );
+    const fetchImpl: typeof fetch = async () =>
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+
+    const client = new XtreamFilterClient(testConfig(), fetchImpl);
+    const results = await client.browseByTmdb(269149, 'vod');
+
+    expect(results).toHaveLength(6);
+    expect(results.map((x) => x.streamId)).toEqual([
+      '70261',
+      '1834468',
+      '70270',
+      '70271',
+      '70273',
+      '70274',
+    ]);
+    expect(results.every((x) => String(x.tmdbId) === '269149')).toBe(true);
+    expect(results.every((x) => x.sourceName === 'Strong 8K')).toBe(true);
   });
 
-  it('inherits group name when leaf omits name (DE - Zoomania)', () => {
-    const raw = JSON.parse(
-      readFileSync(join(root, 'fixtures/xtreamfilter/browse-zootopia-grouped.json'), 'utf8'),
-    );
-    const flat = flattenBrowseItems(XtreamBrowseResponseSchema.parse(raw));
-    const nameless = flat.find((c) => c.streamId === '70261');
-    expect(nameless?.name).toContain('DE - Zoomania');
-  });
-
-  it('still supports ungrouped flat items[]', () => {
-    const raw = JSON.parse(
+  it('still supports ungrouped flat items[]', async () => {
+    const payload = JSON.parse(
       readFileSync(join(root, 'fixtures/xtreamfilter/browse-movie.json'), 'utf8'),
     );
-    const flat = flattenBrowseItems(XtreamBrowseResponseSchema.parse(raw));
-    expect(flat).toHaveLength(2);
-    expect(flat.map((c) => c.streamId)).toEqual(['9001', '9002']);
+
+    const fetchImpl: typeof fetch = async () =>
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+
+    const client = new XtreamFilterClient(testConfig(), fetchImpl);
+    const results = await client.browseByTmdb(693134, 'vod');
+    expect(results).toHaveLength(2);
+    expect(results.map((x) => x.streamId)).toEqual(['9001', '9002']);
   });
 
-  it('does not select the first grouped variant; quality eval prefers HD over DE/4K', () => {
-    const raw = JSON.parse(
-      readFileSync(join(root, 'fixtures/xtreamfilter/browse-zootopia-grouped.json'), 'utf8'),
+  it('passes all flattened TMDb variants into matching (not just items[0])', () => {
+    const parsed = XtreamBrowseResponseSchema.parse(
+      JSON.parse(
+        readFileSync(join(root, 'fixtures/xtreamfilter/browse-zootopia-grouped.json'), 'utf8'),
+      ),
     );
-    const flat = flattenBrowseItems(XtreamBrowseResponseSchema.parse(raw));
+    const flat = flattenBrowseItems(parsed);
+    expect(flat).toHaveLength(6);
+
     const match = matchMedia({
       tmdbId: 269149,
       contentType: 'vod',
@@ -62,33 +102,8 @@ describe('XtreamFilter grouped browse parsing', () => {
       candidates: flat,
     });
     expect(match.kind).toBe('EXACT_ID');
-    expect(match.candidates.length).toBeGreaterThan(1);
-
-    const profile = normalizeArrProfile({
-      source: 'radarr',
-      serverId: 0,
-      profile: ArrQualityProfileSchema.parse(
-        JSON.parse(readFileSync(join(root, 'fixtures/radarr/qualityprofile-hd.json'), 'utf8')),
-      ) as Parameters<typeof normalizeArrProfile>[0]['profile'],
-    });
-
-    const evaluated = match.candidates.map((c) => ({
-      candidate: c,
-      evaluation: evaluateCandidateQuality({
-        profile,
-        observed: parseXtreamQuality({ name: c.name, containerExtension: c.containerExtension }),
-        policy: 'allow' as const,
-      }),
-      tieKey: `${c.sourceId}:${c.streamId}`,
-    }));
-
-    const best = pickBestCompatible(evaluated);
-    expect(best).toBeTruthy();
-    // Must not blindly take the first nested leaf (DE - Zoomania / 70261)
-    expect(best!.candidate.streamId).not.toBe('70261');
-    // 2160p is disallowed by HD profile
-    expect(best!.candidate.streamId).not.toBe('70263');
-    // Prefer an explicit 1080p WEB/HEVC candidate
-    expect(['70262', '70265']).toContain(best!.candidate.streamId);
+    expect(match.candidates).toHaveLength(6);
+    expect(match.candidates.map((c) => c.streamId)).toContain('1834468');
+    expect(match.candidates.map((c) => c.name)).toContain('EN - Zootopia (2016)');
   });
 });

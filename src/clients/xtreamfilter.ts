@@ -2,7 +2,6 @@ import type { AppConfig } from '../config.js';
 import { HttpClient } from '../lib/http.js';
 import type { MatchCandidate } from '../domain/matching/types.js';
 import {
-  XtreamBrowseGroupSchema,
   XtreamBrowseItemSchema,
   XtreamBrowseResponseSchema,
   XtreamCartListSchema,
@@ -13,86 +12,56 @@ import {
 import { z } from 'zod';
 
 type BrowseItem = z.infer<typeof XtreamBrowseItemSchema>;
+type BrowseEntry = z.infer<typeof XtreamBrowseResponseSchema>['items'][number];
 
-function toCandidate(item: BrowseItem, contentTypeHint?: string): MatchCandidate | undefined {
-  const ct = (item.content_type ?? contentTypeHint ?? '').toLowerCase();
+function isBrowseGroup(entry: BrowseEntry): entry is BrowseEntry & { items: BrowseItem[] } {
+  return 'items' in entry && Array.isArray((entry as { items?: unknown }).items);
+}
+
+function toCandidate(
+  item: BrowseItem,
+  opts?: { groupName?: string; groupTmdb?: string | number | null },
+): MatchCandidate | undefined {
+  const ct = (item.content_type ?? '').toLowerCase();
   const contentType = ct === 'series' ? 'series' : ct === 'vod' ? 'vod' : undefined;
   if (!contentType) return undefined;
-  if (!item.name?.trim()) return undefined;
+
+  const name = (item.name?.trim() ? item.name : opts?.groupName)?.trim();
+  if (!name) return undefined;
 
   return {
     sourceId: item.source_id,
     sourceName: item.source_name,
     streamId: contentType === 'vod' ? String(item.id) : undefined,
     seriesId: contentType === 'series' ? String(item.id) : undefined,
-    name: item.name,
-    tmdbId: item.tmdb_id,
+    name,
+    tmdbId: item.tmdb_id ?? opts?.groupTmdb ?? null,
     contentType,
     containerExtension: item.container_extension ?? undefined,
     raw: item,
   };
 }
 
-function isBrowseGroup(entry: unknown): entry is z.infer<typeof XtreamBrowseGroupSchema> {
-  return XtreamBrowseGroupSchema.safeParse(entry).success;
-}
-
 /**
  * Flatten grouped or ungrouped /api/browse payloads into playable leaf candidates.
- * With grouped:true, items[] are TMDb/title groups and items[].items[] are variants.
+ * With grouped:true, items[] are TMDb/title groups and items[].items[] are the variants.
  */
 export function flattenBrowseItems(
   data: z.infer<typeof XtreamBrowseResponseSchema>,
 ): MatchCandidate[] {
-  const out: MatchCandidate[] = [];
-
-  const pushLeaf = (leaf: BrowseItem, groupName?: string, groupTmdb?: string | number | null) => {
-    const merged: BrowseItem = {
-      ...leaf,
-      name: leaf.name?.trim() ? leaf.name : groupName,
-      tmdb_id: leaf.tmdb_id ?? groupTmdb ?? null,
-      // Keep language/quality tokens from the group title available to the quality parser.
-      group: leaf.group ?? groupName,
-    };
-    // Prefer a display name that includes distinguishing group tokens when the leaf name
-    // is missing or is a bare id-like stub; quality eval uses candidate.name.
-    if (
-      groupName &&
-      leaf.name &&
-      leaf.name !== groupName &&
-      !/\b(4k|2160|1080|720|hdr|hevc|x265)\b/i.test(leaf.name)
-    ) {
-      merged.name = `${groupName} ${leaf.name}`.trim();
-    } else if (groupName && !leaf.name?.trim()) {
-      merged.name = groupName;
-    }
-    const candidate = toCandidate(merged);
-    if (candidate) out.push(candidate);
-  };
-
-  for (const entry of data.items ?? []) {
+  const leaves = data.items.flatMap((entry) => {
     if (isBrowseGroup(entry)) {
-      for (const leaf of entry.items) {
-        pushLeaf(leaf, entry.name, entry.tmdb_id);
-      }
-      continue;
+      return entry.items.map((leaf) =>
+        toCandidate(leaf, {
+          groupName: entry.name,
+          groupTmdb: entry.tmdb_id ?? null,
+        }),
+      );
     }
-    const leaf = XtreamBrowseItemSchema.safeParse(entry);
-    if (leaf.success) pushLeaf(leaf.data);
-  }
+    return [toCandidate(entry)];
+  });
 
-  // Legacy: grouped as an array of groups (not boolean).
-  if (Array.isArray(data.grouped)) {
-    for (const g of data.grouped) {
-      const group = XtreamBrowseGroupSchema.safeParse(g);
-      if (!group.success) continue;
-      for (const leaf of group.data.items) {
-        pushLeaf(leaf, group.data.name, group.data.tmdb_id);
-      }
-    }
-  }
-
-  return out;
+  return leaves.filter((c): c is MatchCandidate => c != null);
 }
 
 export class XtreamFilterClient {
