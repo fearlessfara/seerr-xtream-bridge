@@ -1,0 +1,15 @@
+[
+  {
+    "id": 0,
+    "name": "Radarr",
+    "hostname": "radarr",
+    "port": 7878,
+    "apiKey": "test-radarr-key",
+    "useSsl": false,
+    "baseUrl": "",
+    "isDefault": true,
+    "is4k": false,
+    "activeProfileId": 4,
+    "activeDirectory": "/movies"
+  }
+]

@@ -1,0 +1,38 @@
+services:
+  seerr-xtream-bridge:
+    build: .
+    container_name: seerr-xtream-bridge
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Rome
+      HOST: 0.0.0.0
+      PORT: 5056
+      LOG_LEVEL: info
+      DATABASE_PATH: /data/bridge.db
+      BRIDGE_API_KEY: ${BRIDGE_API_KEY}
+      SEERR_URL: http://seerr:5055
+      SEERR_API_KEY: ${SEERR_API_KEY}
+      SEERR_WEBHOOK_SECRET: ${SEERR_WEBHOOK_SECRET}
+      SEERR_AVAILABILITY_GRACE_SECONDS: 60
+      SEERR_REQUEST_COMPLETION_GRACE_SECONDS: 60
+      XTREAMFILTER_URL: http://gluetun:5000
+      XTREAMFILTER_SOURCE_NAME: Strong 8K
+      JELLYFIN_URL: http://jellyfin:8096
+      JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
+      RECONCILE_INTERVAL_SECONDS: 30
+      XTREAM_PARTIAL_POLICY: all_or_nothing
+      QUALITY_UNKNOWN_POLICY: allow
+      QUALITY_PROFILE_CACHE_TTL_SECONDS: 300
+    volumes:
+      - seerr-xtream-bridge-data:/data
+    # Do NOT put this service behind Gluetun.
+    # It must reach Seerr, XtreamFilter (often via gluetun hostname), and Jellyfin.
+    networks:
+      - media
+
+volumes:
+  seerr-xtream-bridge-data:
+
+networks:
+  media:
+    external: true

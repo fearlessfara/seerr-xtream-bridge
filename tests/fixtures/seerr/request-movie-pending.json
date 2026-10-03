@@ -1,0 +1,26 @@
+{
+  "id": 123,
+  "status": 1,
+  "type": "movie",
+  "is4k": false,
+  "serverId": 0,
+  "profileId": 4,
+  "rootFolder": "/movies",
+  "languageProfileId": null,
+  "tags": [],
+  "seasons": [],
+  "media": {
+    "id": 55,
+    "tmdbId": 693134,
+    "tvdbId": null,
+    "status": 2,
+    "status4k": 1,
+    "mediaType": "movie",
+    "seasons": []
+  },
+  "requestedBy": {
+    "id": 1,
+    "displayName": "alice",
+    "email": "user@example.com"
+  }
+}

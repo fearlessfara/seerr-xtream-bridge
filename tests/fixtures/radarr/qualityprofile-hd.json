@@ -1,0 +1,78 @@
+{
+  "id": 4,
+  "name": "HD Bluray + WEB",
+  "upgradeAllowed": true,
+  "cutoff": 7,
+  "items": [
+    {
+      "quality": {
+        "id": 9,
+        "name": "HDTV-1080p",
+        "source": "tv",
+        "resolution": 1080,
+        "modifier": "none"
+      },
+      "items": [],
+      "allowed": false
+    },
+    {
+      "id": 100001,
+      "name": "WEB 1080p",
+      "items": [
+        {
+          "quality": {
+            "id": 3,
+            "name": "WEBDL-1080p",
+            "source": "webdl",
+            "resolution": 1080,
+            "modifier": "none"
+          },
+          "items": [],
+          "allowed": true
+        },
+        {
+          "quality": {
+            "id": 15,
+            "name": "WEBRip-1080p",
+            "source": "webrip",
+            "resolution": 1080,
+            "modifier": "none"
+          },
+          "items": [],
+          "allowed": true
+        }
+      ],
+      "allowed": true
+    },
+    {
+      "quality": {
+        "id": 7,
+        "name": "Bluray-1080p",
+        "source": "bluray",
+        "resolution": 1080,
+        "modifier": "none"
+      },
+      "items": [],
+      "allowed": true
+    },
+    {
+      "quality": {
+        "id": 19,
+        "name": "Bluray-2160p",
+        "source": "bluray",
+        "resolution": 2160,
+        "modifier": "none"
+      },
+      "items": [],
+      "allowed": false
+    }
+  ],
+  "minFormatScore": 0,
+  "cutoffFormatScore": 0,
+  "minUpgradeFormatScore": 1,
+  "formatItems": [
+    { "format": 2, "name": "HDR", "score": 100 },
+    { "format": 3, "name": "x265", "score": 50 }
+  ],
+  "language": { "id": -2, "name": "Original" }
+}

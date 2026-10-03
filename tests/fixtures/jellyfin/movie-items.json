@@ -1,0 +1,14 @@
+{
+  "Items": [
+    {
+      "Id": "jf-movie-1",
+      "Name": "Dune",
+      "Type": "Movie",
+      "ProviderIds": {
+        "Tmdb": "693134"
+      },
+      "ProductionYear": 2021
+    }
+  ],
+  "TotalRecordCount": 1
+}

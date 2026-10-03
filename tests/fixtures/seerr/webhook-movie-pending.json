@@ -1,0 +1,19 @@
+{
+  "notification_type": "MEDIA_PENDING",
+  "event": "New Movie Request",
+  "subject": "Dune (2021)",
+  "message": "A mythic and emotionally charged hero's journey.",
+  "media": {
+    "media_type": "movie",
+    "tmdbId": "693134",
+    "tvdbId": "",
+    "status": "PENDING",
+    "status4k": "UNKNOWN"
+  },
+  "request": {
+    "request_id": "123",
+    "requestedBy_email": "user@example.com",
+    "requestedBy_username": "alice"
+  },
+  "extra": []
+}

@@ -1,0 +1,40 @@
+{
+  "id": 6,
+  "name": "HD-1080p",
+  "upgradeAllowed": true,
+  "cutoff": 3,
+  "items": [
+    {
+      "quality": {
+        "id": 3,
+        "name": "WEBDL-1080p",
+        "source": "web",
+        "resolution": 1080
+      },
+      "items": [],
+      "allowed": true
+    },
+    {
+      "quality": {
+        "id": 7,
+        "name": "Bluray-1080p",
+        "source": "bluray",
+        "resolution": 1080
+      },
+      "items": [],
+      "allowed": true
+    },
+    {
+      "quality": {
+        "id": 15,
+        "name": "Bluray-2160p",
+        "source": "bluray",
+        "resolution": 2160
+      },
+      "items": [],
+      "allowed": false
+    }
+  ],
+  "minFormatScore": 0,
+  "formatItems": [{ "format": 1, "name": "HDR", "score": 50 }]
+}
