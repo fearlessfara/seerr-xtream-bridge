@@ -147,10 +147,21 @@ Bridge candidate selection
 
 Fallback **never** rewrites the Seerr/Radarr/Sonarr profile — it approves the original request.
 
+## Runtime requirements
+
+- **Node.js 24** (current Docker base: `node:24-alpine`)
+- Native module: `better-sqlite3` **13.x** (must be built for the same Node ABI as the runtime image)
+
+The Docker multi-stage build installs and rebuilds `better-sqlite3` in the `node:24-alpine` build stage, then copies `node_modules` into an identical `node:24-alpine` runtime stage so the native addon ABI matches.
+
+Graceful shutdown (`SIGTERM`/`SIGINT`) stops the HTTP server, stops the reconcile worker, then explicitly closes the SQLite connection before exit.
+
 ## Development
 
+Requires Node 24+.
+
 ```bash
-npm install
+npm ci
 npm run typecheck
 npm run lint
 npm run test

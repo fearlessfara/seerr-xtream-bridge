@@ -29,7 +29,7 @@ export function createAppContext(
   log: Logger,
   fetchImpl?: typeof fetch,
 ): AppContext {
-  const { db, sqlite } = openDatabase(config.DATABASE_PATH);
+  const { db, close: closeDb } = openDatabase(config.DATABASE_PATH);
   const repo = new BridgeRepository(db);
   const metrics = new Metrics();
   const seerr = new SeerrClient(config, fetchImpl);
@@ -61,9 +61,10 @@ export function createAppContext(
     metrics,
     closed: false,
     close: () => {
+      if (ctx.closed) return;
       ctx.closed = true;
       worker.stop();
-      sqlite.close();
+      closeDb();
     },
   };
   return ctx;

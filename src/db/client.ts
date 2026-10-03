@@ -6,7 +6,13 @@ import * as schema from './schema.js';
 
 export type Db = BetterSQLite3Database<typeof schema>;
 
-export function openDatabase(databasePath: string): { db: Db; sqlite: Database.Database } {
+export interface OpenDatabaseResult {
+  db: Db;
+  sqlite: Database.Database;
+  close: () => void;
+}
+
+export function openDatabase(databasePath: string): OpenDatabaseResult {
   const dir = path.dirname(databasePath);
   fs.mkdirSync(dir, { recursive: true });
 
@@ -18,7 +24,19 @@ export function openDatabase(databasePath: string): { db: Db; sqlite: Database.D
   migrate(sqlite);
 
   const db = drizzle(sqlite, { schema });
-  return { db, sqlite };
+  let closed = false;
+
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    // Prefer an orderly close so better-sqlite3 can unregister V8 cleanup hooks
+    // before the isolate tears down (avoids RemoveEnvironmentCleanupHook crashes).
+    if (sqlite.open) {
+      sqlite.close();
+    }
+  };
+
+  return { db, sqlite, close };
 }
 
 function migrate(sqlite: Database.Database): void {

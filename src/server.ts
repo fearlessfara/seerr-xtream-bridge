@@ -21,14 +21,33 @@ async function main() {
   await app.listen({ host: config.HOST, port: config.PORT });
   log.info({ host: config.HOST, port: config.PORT }, 'seerr-xtream-bridge listening');
 
+  let shuttingDown = false;
   const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     log.info({ signal }, 'shutting down');
-    ctx.close();
-    await app.close();
+    try {
+      // Stop accepting traffic before tearing down SQLite / native addons.
+      await app.close();
+    } catch (err) {
+      log.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'error while closing HTTP server',
+      );
+    }
+    try {
+      ctx.close();
+    } catch (err) {
+      log.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'error while closing app context / sqlite',
+      );
+    }
     process.exit(0);
   };
-  process.on('SIGINT', () => void shutdown('SIGINT'));
-  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+
+  process.once('SIGINT', () => void shutdown('SIGINT'));
+  process.once('SIGTERM', () => void shutdown('SIGTERM'));
 }
 
 main().catch((err) => {
