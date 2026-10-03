@@ -224,7 +224,8 @@ Recyclarr syncs TRaSH guides into Radarr/Sonarr. It is **not** a bridge runtime 
 
 | Operation          | API                                                       |
 | ------------------ | --------------------------------------------------------- |
-| Refresh            | `POST /Library/Refresh` with `X-Emby-Token`               |
+| Auth               | `Authorization: MediaBrowser Token="<apiKey>"` (Jellyfin 12.x; `X-Emby-Token` returns 401) |
+| Refresh            | `POST /Library/Refresh`                                   |
 | Search by provider | `GET /Items?AnyProviderIdEquals=Tmdb.{id}` (and variants) |
 | TV episodes        | Item tree / `GET /Shows/{id}/Episodes`                    |
 

@@ -18,8 +18,9 @@ export class JellyfinClient {
       timeoutMs: config.HTTP_TIMEOUT_MS,
       serviceName: 'jellyfin',
       fetchImpl,
+      // Jellyfin 10.9+/12.x reject legacy X-Emby-Token; use MediaBrowser Authorization.
       defaultHeaders: {
-        'X-Emby-Token': config.JELLYFIN_API_KEY,
+        Authorization: `MediaBrowser Token="${config.JELLYFIN_API_KEY}"`,
       },
     });
   }
