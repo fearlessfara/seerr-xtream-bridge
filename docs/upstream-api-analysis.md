@@ -222,12 +222,12 @@ Recyclarr syncs TRaSH guides into Radarr/Sonarr. It is **not** a bridge runtime 
 
 ## 4. Jellyfin (bridge verification)
 
-| Operation          | API                                                       |
-| ------------------ | --------------------------------------------------------- |
+| Operation          | API                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------ |
 | Auth               | `Authorization: MediaBrowser Token="<apiKey>"` (Jellyfin 12.x; `X-Emby-Token` returns 401) |
-| Refresh            | `POST /Library/Refresh`                                   |
-| Search by provider | `GET /Items?AnyProviderIdEquals=Tmdb.{id}&Fields=ProviderIds,Path,MediaSources` |
-| TV episodes        | `GET /Shows/{id}/Episodes` with Path/MediaSources fields  |
+| Refresh            | `POST /Library/Refresh`                                                                    |
+| Search by provider | `GET /Items?AnyProviderIdEquals=Tmdb.{id}&Fields=ProviderIds,Path,MediaSources`            |
+| TV episodes        | `GET /Shows/{id}/Episodes` with Path/MediaSources fields                                   |
 
 **Critical Jellyfin 12 behaviour:** `AnyProviderIdEquals=Tmdb.{id}` may return many unrelated items. The bridge **must** locally require `ProviderIds.Tmdb === String(tmdbId)` (plus playable Path/MediaSources). Server-side filters are never identity proof.
 

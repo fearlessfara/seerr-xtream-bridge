@@ -67,8 +67,8 @@ export class JellyfinClient {
       schema: JellyfinItemsResponseSchema,
     });
 
-    const matched = (data.Items ?? []).filter(
-      (item): item is JellyfinItem => itemMatchesTmdb(item as JellyfinItem, tmdbId),
+    const matched = (data.Items ?? []).filter((item): item is JellyfinItem =>
+      itemMatchesTmdb(item as JellyfinItem, tmdbId),
     );
 
     const seen = new Set<string>();
@@ -120,10 +120,7 @@ export class JellyfinClient {
 
     for (const season of seasons) {
       const eps = episodes.filter(
-        (e) =>
-          e.ParentIndexNumber === season &&
-          (e.IndexNumber ?? 0) > 0 &&
-          hasPlayableMedia(e),
+        (e) => e.ParentIndexNumber === season && (e.IndexNumber ?? 0) > 0 && hasPlayableMedia(e),
       );
       if (!eps.length) {
         missing.push(season);
